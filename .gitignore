@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Simulation and profiler output
+obj_dir/
+*.vvp
+a.out
+*.vcd
+*.fst
+*.ncu-rep
+results/
