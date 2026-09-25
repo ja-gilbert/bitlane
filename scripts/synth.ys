@@ -1,0 +1,15 @@
+# bitlane synthesis flow: flatten a design into AND/OR/XOR/MUX/NOT gates and
+# positive-edge D flip-flops. synth.py runs it as
+#   read_verilog <file>; hierarchy -check -top <top>; script synth.ys; write_json <out>
+
+proc                           # always blocks -> flip-flop cells and muxes
+flatten                        # inline submodules into the top module
+opt                            # fold constants, merge duplicates, drop unused wires
+techmap                        # word-level cells -> single-bit gates and flops
+opt
+dfflegalize -cell $_DFF_P_ 01  # only plain posedge D flops (01: may start at 0 or 1);
+                               # enables and sync resets become muxes in front of D,
+                               # async resets are an error
+opt -nodffe -nosdff            # clean up without merging enables/resets back in
+abc -g simple                  # re-synthesize logic as AND, OR, XOR, MUX (+ NOT)
+opt_clean                      # remove dead cells and wires
