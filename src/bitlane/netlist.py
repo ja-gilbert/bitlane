@@ -6,7 +6,7 @@ like any other. Every other net is numbered from 2 in order of first use.
 
 import json
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 GATES = {  # Yosys cell type -> (kind, input ports in order); the output port is Y
@@ -40,6 +40,7 @@ class Netlist:
     clock: str | None  # the input port on every flop's C pin; None without flops
     gates: list[Gate]
     flops: list[Flop]
+    names: dict[int, str] = field(default_factory=dict)  # net -> public name
 
 
 def bit_name(name: str, i: int, width: int) -> str:
@@ -93,14 +94,14 @@ def read_netlist(path: Path) -> Netlist:
         if clock is None:
             raise ValueError("the clock is not a 1-bit input port")
 
-    netlist = Netlist(2 + len(ids), inputs, outputs, clock, gates, flops)
-
     names = {}  # our net id -> public name, for messages
     for name, wire in module["netnames"].items():
         if not wire["hide_name"]:
             for i, bit in enumerate(wire["bits"]):
                 if bit in ids:
                     names[ids[bit]] = bit_name(name, i, len(wire["bits"]))
+
+    netlist = Netlist(2 + len(ids), inputs, outputs, clock, gates, flops, names)
     if undriven := sorted(undriven_nets(netlist)):
         missing = ", ".join(names.get(n, f"net {n}") for n in undriven)
         raise ValueError(f"no driver for {missing}")
