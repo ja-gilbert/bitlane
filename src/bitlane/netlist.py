@@ -5,6 +5,7 @@ like any other. Every other net is numbered from 2 in order of first use.
 """
 
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,34 +42,45 @@ class Netlist:
     flops: list[Flop]
 
 
+def bit_name(name: str, i: int, width: int) -> str:
+    return name if width == 1 else f"{name}[{i}]"
+
+
 def read_netlist(path: Path) -> Netlist:
     modules = json.loads(path.read_text())["modules"]
     (module,) = modules.values()  # flattened, so exactly one module
     ids: dict[int, int] = {}  # Yosys wire id -> our net id
 
-    def net(bit: int | str) -> int:
-        """Our net id for a JSON bit: a Yosys wire id or the constant "0"/"1"."""
+    def net(bit: int | str, where: str) -> int:
+        """Our net id for a JSON bit: a Yosys wire id or a constant "0"/"1"/"x"/"z"."""
         if isinstance(bit, int):
             return ids.setdefault(bit, 2 + len(ids))
         if bit in ("0", "1"):
             return int(bit)
-        raise ValueError(f"unsupported bit {bit!r}")  # "x" and "z": task 3
+        if bit == "x":
+            warnings.warn(f"{where} is x; treating it as 0")
+            return 0
+        raise ValueError(f"{where} is {bit!r}; tri-state is not supported")
 
     inputs, outputs = {}, {}
     for name, port in module["ports"].items():
         ports = inputs if port["direction"] == "input" else outputs
-        ports[name] = [net(bit) for bit in port["bits"]]
+        width = len(port["bits"])
+        ports[name] = [
+            net(b, bit_name(name, i, width)) for i, b in enumerate(port["bits"])
+        ]
 
     gates, flops, clocks = [], [], set()
     for name, cell in module["cells"].items():
-        pins = cell["connections"]
+        pins = {
+            p: net(bits[0], f"{name}.{p}") for p, bits in cell["connections"].items()
+        }
         if cell["type"] == FLOP:
-            flops.append(Flop(d=net(pins["D"][0]), q=net(pins["Q"][0])))
-            clocks.add(net(pins["C"][0]))
+            flops.append(Flop(d=pins["D"], q=pins["Q"]))
+            clocks.add(pins["C"])
         elif cell["type"] in GATES:
             kind, in_ports = GATES[cell["type"]]
-            gate_inputs = [net(pins[p][0]) for p in in_ports]
-            gates.append(Gate(kind, gate_inputs, net(pins["Y"][0])))
+            gates.append(Gate(kind, [pins[p] for p in in_ports], pins["Y"]))
         else:
             raise ValueError(f"unsupported cell type {cell['type']} in cell {name}")
 
@@ -81,4 +93,27 @@ def read_netlist(path: Path) -> Netlist:
         if clock is None:
             raise ValueError("the clock is not a 1-bit input port")
 
-    return Netlist(2 + len(ids), inputs, outputs, clock, gates, flops)
+    netlist = Netlist(2 + len(ids), inputs, outputs, clock, gates, flops)
+
+    names = {}  # our net id -> public name, for messages
+    for name, wire in module["netnames"].items():
+        if not wire["hide_name"]:
+            for i, bit in enumerate(wire["bits"]):
+                if bit in ids:
+                    names[ids[bit]] = bit_name(name, i, len(wire["bits"]))
+    if undriven := sorted(undriven_nets(netlist)):
+        missing = ", ".join(names.get(n, f"net {n}") for n in undriven)
+        raise ValueError(f"no driver for {missing}")
+    return netlist
+
+
+def undriven_nets(netlist: Netlist) -> set[int]:
+    """Nets something reads but nothing drives: no input, gate, flop or constant."""
+    driven = {0, 1}
+    driven |= {b for bits in netlist.inputs.values() for b in bits}
+    driven |= {gate.output for gate in netlist.gates}
+    driven |= {flop.q for flop in netlist.flops}
+    used = {b for bits in netlist.outputs.values() for b in bits}
+    used |= {b for gate in netlist.gates for b in gate.inputs}
+    used |= {flop.d for flop in netlist.flops}
+    return used - driven
