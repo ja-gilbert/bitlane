@@ -2,27 +2,16 @@
 
 import json
 from collections import Counter
-from functools import cache
-from pathlib import Path
 
 import pytest
+from helpers import load
 
-from bitlane.netlist import Netlist, read_netlist
-from bitlane.synth import cell_counts, synth
-
-ROOT = Path(__file__).parents[1]
+from bitlane.netlist import read_netlist
+from bitlane.synth import cell_counts
 
 
 def widths(ports: dict[str, list[int]]) -> dict[str, int]:
     return {name: len(bits) for name, bits in ports.items()}
-
-
-@cache
-def load(name: str) -> tuple[Netlist, Path]:
-    """Synthesize designs/<name>.v with Yosys (once per run) and read it back."""
-    path = ROOT / "build" / f"{name}.json"
-    synth(ROOT / "designs" / f"{name}.v", name, path)
-    return read_netlist(path), path
 
 
 @pytest.mark.parametrize("name", ["counter", "adder"])
