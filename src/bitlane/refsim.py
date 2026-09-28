@@ -14,6 +14,7 @@ import numpy as np
 
 from bitlane.levels import Packed
 
+LANES = np.arange(32, dtype=np.uint32)  # bit position of each test within a word
 OPS = [  # in KINDS order (NOT, AND, OR, XOR, MUX); each takes the input words a, b, s
     lambda a, b, s: ~a,
     lambda a, b, s: a & b,
@@ -30,26 +31,31 @@ def pack_inputs(packed: Packed, inputs: dict[str, np.ndarray]) -> np.ndarray:
     vals = np.zeros((packed.netlist.n_nets, n_words), dtype=np.uint32)
     vals[1] = 0xFFFFFFFF  # net 1 is constant 1
     for name, values in inputs.items():
+        padded = np.zeros(n_words * 32, dtype=np.uint64)
+        padded[:n_tests] = values
+        by_word = padded.reshape(n_words, 32)  # test 32*w + t sits at [w, t]
         for bit, net in enumerate(packed.netlist.inputs[name]):
-            for t in range(n_tests):
-                if (int(values[t]) >> bit) & 1:
-                    vals[net, t // 32] |= 1 << (t % 32)
+            lane_bits = ((by_word >> bit) & 1).astype(np.uint32)
+            vals[net] = np.bitwise_or.reduce(lane_bits << LANES, axis=1)
     return vals
 
 
 def eval_gates(packed: Packed, vals: np.ndarray) -> None:
     """Evaluate every gate in place, one level at a time.
 
-    The innermost statement, one gate on one word, is exactly what one GPU
-    thread will do, and one level is one kernel launch.
+    Gather the input words of all gates in the level, apply each kind's op to
+    its gates in one array operation, scatter the results. Every (gate, word)
+    element of those array operations is what one GPU thread will do, and one
+    level is one kernel launch.
     """
     for start, end in pairwise(packed.level_start):
-        for gate in range(start, end):
-            a, b, s = packed.in_nets[gate]
-            y = packed.out_net[gate]
-            op = OPS[packed.kind[gate]]
-            for word in range(vals.shape[1]):
-                vals[y, word] = op(vals[a, word], vals[b, word], vals[s, word])
+        kind = packed.kind[start:end]
+        ins = packed.in_nets[start:end]
+        a, b, s = vals[ins[:, 0]], vals[ins[:, 1]], vals[ins[:, 2]]
+        out = packed.out_net[start:end]
+        for code, op in enumerate(OPS):
+            mask = kind == code
+            vals[out[mask]] = op(a[mask], b[mask], s[mask])
 
 
 def unpack_outputs(packed: Packed, vals: np.ndarray, n_tests: int) -> dict:
@@ -58,9 +64,8 @@ def unpack_outputs(packed: Packed, vals: np.ndarray, n_tests: int) -> dict:
     for name, nets in packed.netlist.outputs.items():
         values = np.zeros(n_tests, dtype=np.uint64)
         for bit, net in enumerate(nets):
-            for t in range(n_tests):
-                if (int(vals[net, t // 32]) >> (t % 32)) & 1:
-                    values[t] |= 1 << bit
+            lane_bits = (vals[net][:, None] >> LANES) & 1  # (n_words, 32)
+            values |= lane_bits.reshape(-1)[:n_tests].astype(np.uint64) << bit
         outputs[name] = values
     return outputs
 
