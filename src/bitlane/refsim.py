@@ -6,6 +6,10 @@ a gate for 32 tests at once, and a MUX is (b & s) | (a & ~s): take b's bit where
 s is 1 and a's bit where s is 0. Values live in vals[net, word], net-major, so
 one gate's words sit together: the layout the CUDA kernel will use with one
 thread per (gate, word).
+
+A cycle applies the inputs, evaluates the gates, samples the outputs, and then
+lets every flop capture its D: the clock edge. Flops start at 0, so a design
+must be reset by its own stimulus before its outputs mean anything.
 """
 
 from itertools import pairwise
@@ -24,20 +28,26 @@ OPS = [  # in KINDS order (NOT, AND, OR, XOR, MUX); each takes the input words a
 ]
 
 
-def pack_inputs(packed: Packed, inputs: dict[str, np.ndarray]) -> np.ndarray:
-    """vals[net, word] with the driven input ports filled in; other inputs stay 0."""
-    n_tests = len(next(iter(inputs.values())))
+def new_vals(packed: Packed, n_tests: int) -> np.ndarray:
+    """vals[net, word], all zero except the constant-1 net; flops start at 0 too."""
     n_words = (n_tests + 31) // 32  # the last word's spare lanes are padding
     vals = np.zeros((packed.netlist.n_nets, n_words), dtype=np.uint32)
     vals[1] = 0xFFFFFFFF  # net 1 is constant 1
+    return vals
+
+
+def pack_inputs(
+    packed: Packed, inputs: dict[str, np.ndarray], vals: np.ndarray
+) -> None:
+    """Write the driven input ports into vals; inputs not given are left alone."""
+    n_words = vals.shape[1]
     for name, values in inputs.items():
         padded = np.zeros(n_words * 32, dtype=np.uint64)
-        padded[:n_tests] = values
+        padded[: len(values)] = values
         by_word = padded.reshape(n_words, 32)  # test 32*w + t sits at [w, t]
         for bit, net in enumerate(packed.netlist.inputs[name]):
             lane_bits = ((by_word >> bit) & 1).astype(np.uint32)
             vals[net] = np.bitwise_or.reduce(lane_bits << LANES, axis=1)
-    return vals
 
 
 def eval_gates(packed: Packed, vals: np.ndarray) -> None:
@@ -70,8 +80,28 @@ def unpack_outputs(packed: Packed, vals: np.ndarray, n_tests: int) -> dict:
     return outputs
 
 
+def simulate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
+    """Outputs of a clocked design, cycle by cycle.
+
+    inputs[port] and the returned outputs[port] are (n_cycles, n_tests) arrays.
+    """
+    n_cycles, n_tests = next(iter(inputs.values())).shape
+    vals = new_vals(packed, n_tests)
+    outputs = {
+        name: np.zeros((n_cycles, n_tests), dtype=np.uint64)
+        for name in packed.netlist.outputs
+    }
+    for cycle in range(n_cycles):
+        pack_inputs(packed, {name: v[cycle] for name, v in inputs.items()}, vals)
+        eval_gates(packed, vals)
+        for name, values in unpack_outputs(packed, vals, n_tests).items():
+            outputs[name][cycle] = values
+        # The clock edge: every flop captures its D at once.
+        vals[packed.flop_q] = vals[packed.flop_d]
+    return outputs
+
+
 def evaluate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
-    """Outputs of a combinational design for every test."""
-    vals = pack_inputs(packed, inputs)
-    eval_gates(packed, vals)
-    return unpack_outputs(packed, vals, len(next(iter(inputs.values()))))
+    """Outputs of a combinational design for every test: one cycle, no flops."""
+    outputs = simulate(packed, {name: v[np.newaxis] for name, v in inputs.items()})
+    return {name: v[0] for name, v in outputs.items()}
