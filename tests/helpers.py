@@ -7,6 +7,7 @@ from bitlane.netlist import Netlist, read_netlist
 from bitlane.synth import synth
 
 ROOT = Path(__file__).parents[1]
+DESIGNS = ["counter", "adder", "mux", "alu", "fsm"]
 
 
 @cache

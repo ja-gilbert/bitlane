@@ -4,13 +4,13 @@ from collections import Counter
 
 import numpy as np
 import pytest
-from helpers import load
+from helpers import DESIGNS, load
 
 from bitlane.levels import KINDS, CombLoopError, gate_levels, pack
 from bitlane.netlist import Flop, Gate, Netlist
 
 
-@pytest.mark.parametrize("name", ["counter", "adder"])
+@pytest.mark.parametrize("name", DESIGNS)
 def test_every_input_comes_from_a_lower_level(name):
     netlist, _ = load(name)
     level = gate_levels(netlist)
@@ -52,7 +52,7 @@ def test_flop_feedback_is_not_a_loop():
     assert gate_levels(TOGGLE) == [1]
 
 
-@pytest.mark.parametrize("name", ["counter", "adder"])
+@pytest.mark.parametrize("name", DESIGNS)
 def test_packed_levels_only_read_what_is_known(name):
     netlist, _ = load(name)
     packed = pack(netlist)
