@@ -1,10 +1,13 @@
 """bitlane: a GPU gate-level logic simulator. Command line entry point."""
 
 import argparse
+import time
 from pathlib import Path
 
 from bitlane.levels import pack
 from bitlane.netlist import read_netlist
+from bitlane.refsim import simulate
+from bitlane.stimulus import random_inputs
 from bitlane.synth import cell_counts, synth
 
 
@@ -19,7 +22,20 @@ def main() -> None:
     p = sub.add_parser("levels", help="sort a JSON netlist into levels and print sizes")
     p.add_argument("netlist", type=Path, help="JSON netlist written by bitlane synth")
 
+    p = sub.add_parser("sim", help="run random tests through the NumPy simulator")
+    p.add_argument("netlist", type=Path, help="JSON netlist written by bitlane synth")
+    p.add_argument("--tests", type=int, default=1024)
+    p.add_argument("--cycles", type=int, default=100)
+    p.add_argument("--reset", help="input port to hold high in cycle 0")
+
     args = parser.parse_args()
+    try:
+        run(args)
+    except ValueError as e:  # bad netlist, combinational loop, unknown port: one line
+        raise SystemExit(f"bitlane: {e}") from e
+
+
+def run(args: argparse.Namespace) -> None:
     if args.command == "synth":
         top = args.top or args.verilog.stem
         out = Path("build") / f"{top}.json"
@@ -28,11 +44,8 @@ def main() -> None:
             print(f"{n:6}  {cell_type}")
         print(f"wrote {out}")
     elif args.command == "levels":
-        try:
-            netlist = read_netlist(args.netlist)
-            packed = pack(netlist)
-        except ValueError as e:
-            raise SystemExit(f"bitlane: {e}") from e
+        netlist = read_netlist(args.netlist)
+        packed = pack(netlist)
         starts = packed.level_start
         depth = len(starts) - 1
         for k in range(depth):
@@ -41,3 +54,12 @@ def main() -> None:
             f"{len(netlist.gates)} gates, {len(netlist.flops)} flops, "
             f"{netlist.n_nets} nets, depth {depth}"
         )
+    elif args.command == "sim":
+        netlist = read_netlist(args.netlist)
+        inputs = random_inputs(netlist, args.cycles, args.tests, args.reset)
+        packed = pack(netlist)
+        start = time.perf_counter()  # time the simulation only
+        simulate(packed, inputs)
+        seconds = time.perf_counter() - start
+        rate = args.tests * args.cycles / seconds
+        print(f"{args.tests} tests x {args.cycles} cycles: {rate:,.0f} test-cycles/s")
