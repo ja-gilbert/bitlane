@@ -4,6 +4,7 @@ import argparse
 import time
 from pathlib import Path
 
+from bitlane.icarus import first_mismatch, run_icarus
 from bitlane.levels import pack
 from bitlane.netlist import read_netlist
 from bitlane.refsim import simulate
@@ -27,11 +28,17 @@ def main() -> None:
     p.add_argument("--tests", type=int, default=1024)
     p.add_argument("--cycles", type=int, default=100)
     p.add_argument("--reset", help="input port to hold high in cycle 0")
+    p = sub.add_parser("check", help="compare the NumPy simulator with Icarus Verilog")
+    p.add_argument("verilog", type=Path, help="Verilog source file")
+    p.add_argument("--top", help="top module (default: the file's stem)")
+    p.add_argument("--tests", type=int, default=10000)
+    p.add_argument("--cycles", type=int, default=20)
+    p.add_argument("--reset", help="input port to hold high in cycle 0")
 
     args = parser.parse_args()
     try:
         run(args)
-    except ValueError as e:  # bad netlist, combinational loop, unknown port: one line
+    except ValueError as e:  # bad netlist, loop, unknown port, mismatch: one line
         raise SystemExit(f"bitlane: {e}") from e
 
 
@@ -63,3 +70,21 @@ def run(args: argparse.Namespace) -> None:
         seconds = time.perf_counter() - start
         rate = args.tests * args.cycles / seconds
         print(f"{args.tests} tests x {args.cycles} cycles: {rate:,.0f} test-cycles/s")
+
+    elif args.command == "check":
+        top = args.top or args.verilog.stem
+        out = Path("build") / f"{top}.json"
+        synth(args.verilog, top, out)
+        netlist = read_netlist(out)
+        if netlist.clock and not args.reset:
+            raise ValueError(
+                "a clocked design needs --reset so every test starts from reset"
+            )
+        inputs = random_inputs(netlist, args.cycles, args.tests, args.reset)
+        ours = simulate(pack(netlist), inputs)
+        workdir = Path("build") / f"{top}_icarus"
+        theirs, unknown = run_icarus(args.verilog, top, netlist, inputs, workdir)
+        first_cycle = 1 if netlist.clock else 0  # the reset cycle is not compared
+        if mismatch := first_mismatch(ours, theirs, unknown, first_cycle):
+            raise ValueError(mismatch)
+        print(f"{top}: {args.tests} tests x {args.cycles} cycles match Icarus")
