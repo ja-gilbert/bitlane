@@ -1,18 +1,17 @@
-"""The NumPy simulator against Icarus Verilog on every design, same stimulus."""
+"""Each simulator against Icarus Verilog on every design, same stimulus."""
 
 import pytest
 from helpers import DESIGNS, ROOT, load
 
 from bitlane.icarus import first_mismatch, run_icarus
 from bitlane.levels import pack
-from bitlane.refsim import simulate
 from bitlane.stimulus import random_inputs
 
 RESET = {"counter": "rst", "fsm": "rst"}  # the clocked designs and their reset port
 
 
 @pytest.mark.parametrize("name", DESIGNS)
-def test_matches_icarus(name, tmp_path):
+def test_matches_icarus(name, tmp_path, simulate):
     netlist, _ = load(name)
     reset = RESET.get(name)
     inputs = random_inputs(netlist, n_cycles=20, n_tests=200, reset=reset)
