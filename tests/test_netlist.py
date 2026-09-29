@@ -4,7 +4,7 @@ import json
 from collections import Counter
 
 import pytest
-from helpers import load
+from helpers import DESIGNS, load
 
 from bitlane.netlist import read_netlist
 from bitlane.synth import cell_counts
@@ -14,7 +14,7 @@ def widths(ports: dict[str, list[int]]) -> dict[str, int]:
     return {name: len(bits) for name, bits in ports.items()}
 
 
-@pytest.mark.parametrize("name", ["counter", "adder"])
+@pytest.mark.parametrize("name", DESIGNS)
 def test_cells_match_yosys(name):
     netlist, path = load(name)
     seen = Counter(f"$_{gate.kind}_" for gate in netlist.gates)
