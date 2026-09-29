@@ -4,11 +4,10 @@ import numpy as np
 from helpers import load
 
 from bitlane.levels import pack
-from bitlane.refsim import simulate
 from bitlane.stimulus import random_inputs
 
 
-def test_mux_selects_one_input():
+def test_mux_selects_one_input(simulate):
     netlist, _ = load("mux")
     inputs = random_inputs(netlist, n_cycles=1, n_tests=4096)
     out = simulate(pack(netlist), inputs)
@@ -17,7 +16,7 @@ def test_mux_selects_one_input():
     assert np.array_equal(out["y"], expected)
 
 
-def test_alu_matches_integer_model():
+def test_alu_matches_integer_model(simulate):
     netlist, _ = load("alu")
     inputs = random_inputs(netlist, n_cycles=1, n_tests=4096)
     inputs["b"][:, :100] = inputs["a"][:, :100]  # some ties, so < and <= differ
@@ -39,7 +38,7 @@ def test_alu_matches_integer_model():
     assert np.array_equal(out["zero"], y == 0)
 
 
-def test_fsm_matches_state_table():
+def test_fsm_matches_state_table(simulate):
     netlist, _ = load("fsm")
     n_cycles, n_tests = 300, 1024
     inputs = random_inputs(netlist, n_cycles, n_tests, reset="rst")

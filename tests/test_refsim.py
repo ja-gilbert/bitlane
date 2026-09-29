@@ -6,7 +6,7 @@ from helpers import load
 
 from bitlane.levels import pack
 from bitlane.netlist import Gate, Netlist
-from bitlane.refsim import evaluate, simulate
+from bitlane.refsim import evaluate
 
 
 @pytest.mark.parametrize("n_tests", [4096, 100])  # 100 is not a multiple of 32
@@ -23,7 +23,7 @@ def test_adder_matches_integer_addition(n_tests):
 
 
 def test_mux_and_not():
-    # The real designs have no MUX, so a hand-made one: y = s ? b : a and z = NOT a.
+    # The smallest netlist with a MUX and a NOT: y = s ? b : a and z = NOT a
     # Nets: 2 a, 3 b, 4 s, 5 y, 6 z.
     netlist = Netlist(
         n_nets=7,
@@ -40,7 +40,7 @@ def test_mux_and_not():
     assert np.array_equal(out["z"], 1 - a)
 
 
-def test_counter_matches_integer_model():
+def test_counter_matches_integer_model(simulate):
     netlist, _ = load("counter")
     rng = np.random.default_rng(2)
     n_cycles, n_tests = 600, 1024  # long enough for the count to wrap past 255
