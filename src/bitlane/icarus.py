@@ -124,9 +124,9 @@ def first_mismatch(
         bad[:first_cycle] = False
         if bad.any():
             cycle, test = np.argwhere(bad)[0]
-            icarus = "x" if unknown[name][cycle, test] else theirs[name][cycle, test]
+            other = "x" if unknown[name][cycle, test] else theirs[name][cycle, test]
             return (
                 f"{name} differs at test {test}, cycle {cycle}: "
-                f"ours {mine[cycle, test]}, Icarus {icarus}"
+                f"ours {mine[cycle, test]}, reference {other}"
             )
     return None

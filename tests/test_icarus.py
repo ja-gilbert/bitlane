@@ -1,13 +1,11 @@
 """Each simulator against Icarus Verilog on every design, same stimulus."""
 
 import pytest
-from helpers import DESIGNS, ROOT, load
+from helpers import DESIGNS, RESET, ROOT, load
 
 from bitlane.icarus import first_mismatch, run_icarus
 from bitlane.levels import pack
 from bitlane.stimulus import random_inputs
-
-RESET = {"counter": "rst", "fsm": "rst"}  # the clocked designs and their reset port
 
 
 @pytest.mark.parametrize("name", DESIGNS)
