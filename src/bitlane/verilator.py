@@ -22,23 +22,26 @@ MAIN = """\
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <thread>
 #include <vector>
 
 #include "V{top}.h"
 #include "verilated.h"
 
-// One worker: its own model, a run of whole tests, one row per (test, cycle).
-static void simulate(const uint64_t *stim, uint64_t *out, size_t rows) {{
+struct Model {{
     VerilatedContext context;
     V{top} dut{{&context}};
+}};
+
+// One worker: its own model, a run of whole tests, one row per (test, cycle).
+static void simulate(V{top} &dut, const uint64_t *stim, uint64_t *out, size_t rows) {{
     for (size_t row = 0; row < rows; row++, stim += {n_in}, out += {n_out}) {{
         {apply}  // apply the inputs
         {settle}
         {sample}  // sample the outputs
         {edge}
     }}
-    dut.final();
 }}
 
 int main(int, char **argv) {{
@@ -49,21 +52,23 @@ int main(int, char **argv) {{
     FILE *file = fopen(argv[1], "rb");
     if (!file || fread(stim.data(), 8, stim.size(), file) != stim.size()) return 1;
     fclose(file);
+    std::vector<Model> models(threads);  // built before the clock starts
 
     auto start = std::chrono::steady_clock::now();  // timed: the simulation only
     if (threads == 1) {{
-        simulate(stim.data(), out.data(), rows);
+        simulate(models[0].dut, stim.data(), out.data(), rows);
     }} else {{
         std::vector<std::thread> workers;
         for (size_t k = 0; k < threads; k++) {{
             size_t first = tests * k / threads, last = tests * (k + 1) / threads;
-            workers.emplace_back(simulate, &stim[first * cycles * {n_in}],
+            workers.emplace_back(simulate, std::ref(models[k].dut), &stim[first * cycles * {n_in}],
                                  &out[first * cycles * {n_out}], (last - first) * cycles);
         }}
         for (auto &worker : workers) worker.join();
     }}
     std::chrono::duration<double> seconds = std::chrono::steady_clock::now() - start;
 
+    for (auto &model : models) model.dut.final();
     file = fopen(argv[2], "wb");
     fwrite(out.data(), 8, out.size(), file);
     fclose(file);

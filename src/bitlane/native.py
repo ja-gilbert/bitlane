@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from bitlane.levels import Packed
+from bitlane.netlist import Netlist
 from bitlane.refsim import new_vals, pack_inputs, unpack_outputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,25 +68,35 @@ def run(
     return probe_words
 
 
-def simulate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
-    """The same contract as refsim.simulate, computed by the C reference."""
+def probe_nets(netlist: Netlist) -> np.ndarray:
+    """Every output port's nets, in port order: the rows the C code copies out."""
+    return np.array(
+        [n for nets in netlist.outputs.values() for n in nets], dtype=np.int32
+    )
+
+
+def pack_stimulus(packed: Packed, inputs: dict) -> tuple[np.ndarray, np.ndarray]:
+    """The driven input nets and their packed words for every cycle:
+    stim_net (n_stim,) and stim_words (n_cycles, n_stim, n_words)."""
     netlist = packed.netlist
     n_cycles, n_tests = next(iter(inputs.values())).shape
     stim_net = np.array(
         [n for name in inputs for n in netlist.inputs[name]], dtype=np.int32
     )
-    probe_net = np.array(
-        [n for nets in netlist.outputs.values() for n in nets], dtype=np.int32
-    )
-
-    vals = new_vals(packed, n_tests)  # scratch rows, for packing and unpacking only
+    vals = new_vals(packed, n_tests)  # scratch rows, for packing only
     stim_words = np.zeros((n_cycles, len(stim_net), vals.shape[1]), dtype=np.uint32)
     for cycle in range(n_cycles):
         pack_inputs(packed, {name: v[cycle] for name, v in inputs.items()}, vals)
         stim_words[cycle] = vals[stim_net]
+    return stim_net, stim_words
 
-    probe_words = run(packed, stim_net, stim_words, probe_net)
 
+def unpack_probes(packed: Packed, probe_words: np.ndarray, n_tests: int) -> dict:
+    """Packed probe rows for every cycle back to outputs[port] of (n_cycles, n_tests)."""
+    netlist = packed.netlist
+    n_cycles = len(probe_words)
+    probe_net = probe_nets(netlist)
+    vals = new_vals(packed, n_tests)  # scratch rows, for unpacking only
     outputs = {
         name: np.zeros((n_cycles, n_tests), dtype=np.uint64) for name in netlist.outputs
     }
@@ -94,3 +105,11 @@ def simulate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
         for name, values in unpack_outputs(packed, vals, n_tests).items():
             outputs[name][cycle] = values
     return outputs
+
+
+def simulate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
+    """The same contract as refsim.simulate, computed by the C reference."""
+    n_tests = next(iter(inputs.values())).shape[1]
+    stim_net, stim_words = pack_stimulus(packed, inputs)
+    probe_words = run(packed, stim_net, stim_words, probe_nets(packed.netlist))
+    return unpack_probes(packed, probe_words, n_tests)

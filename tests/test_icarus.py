@@ -14,7 +14,7 @@ def test_matches_icarus(name, tmp_path, simulate):
     reset = RESET.get(name)
     inputs = random_inputs(netlist, n_cycles=20, n_tests=200, reset=reset)
     ours = simulate(pack(netlist), inputs)
-    theirs, unknown = run_icarus(
+    theirs, unknown, _ = run_icarus(
         ROOT / "designs" / f"{name}.v", name, netlist, inputs, tmp_path
     )
     # A clocked design starts each test in the previous test's state (x for the first),
