@@ -8,6 +8,7 @@ from bitlane.synth import synth
 
 ROOT = Path(__file__).parents[1]
 DESIGNS = ["counter", "adder", "mux", "alu", "fsm"]
+RESET = {"counter": "rst", "fsm": "rst"}  # the clocked designs and their reset port
 
 
 @cache
