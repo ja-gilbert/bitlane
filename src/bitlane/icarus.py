@@ -6,9 +6,15 @@ outputs one time unit before the next edge, then makes the edge: the cycle model
 of refsim. The tests run back to back in one simulation, so a test starts in
 whatever state the previous one left (x for the very first), which is why the
 compare starts after the reset cycle.
+
+The sampled outputs go into memories and are written out only after the last
+cycle. The testbench prints "loaded" before the first cycle and "simulated" after
+the last, and Python timestamps those lines as they arrive, so the seconds it
+reports cover the simulation alone, never the file I/O.
 """
 
 import subprocess
+import time
 from pathlib import Path
 
 import numpy as np
@@ -22,16 +28,21 @@ module tb;
 {signals}
     {top} dut({connections});
     reg [{row_bits}:0] tb_stim [0:{last_row}];
+{memories}
     integer tb_i, tb_f;
     initial begin
         $readmemh("{stim}", tb_stim);
-        tb_f = $fopen("{out}", "w");
+        $display("loaded"); $fflush;
         for (tb_i = 0; tb_i <= {last_row}; tb_i = tb_i + 1) begin
             #1 {{{inputs}}} = tb_stim[tb_i];  // after the edge
-            #3 $fwrite(tb_f, "{formats}\\n", {outputs});  // one unit before the edge
+            #3 {sample}  // one unit before the edge
             #1 {clock} = 1;
             #5 {clock} = 0;
         end
+        $display("simulated"); $fflush;
+        tb_f = $fopen("{out}", "w");
+        for (tb_i = 0; tb_i <= {last_row}; tb_i = tb_i + 1)
+            $fwrite(tb_f, "{formats}\\n", {outputs});
         $fclose(tb_f);
         $finish;
     end
@@ -63,6 +74,9 @@ def testbench(netlist: Netlist, top: str, n_rows: int, stim: Path, out: Path) ->
     inputs, outputs = driven_inputs(netlist), list(netlist.outputs)
     signals = [f"    reg [{len(ports[n]) - 1}:0] {n};" for n in inputs]
     signals += [f"    wire [{len(ports[n]) - 1}:0] {n};" for n in outputs]
+    memories = [
+        f"    reg [{len(ports[n]) - 1}:0] tb_out_{n} [0:{n_rows - 1}];" for n in outputs
+    ]
     return TESTBENCH.format(
         clock=netlist.clock or "clk",
         signals="\n".join(signals),
@@ -73,16 +87,19 @@ def testbench(netlist: Netlist, top: str, n_rows: int, stim: Path, out: Path) ->
         stim=stim,
         out=out,
         inputs=", ".join(inputs),
+        memories="\n".join(memories),
+        sample=" ".join(f"tb_out_{n}[tb_i] = {n};" for n in outputs),
         formats=" ".join("%h" for _ in outputs),
-        outputs=", ".join(outputs),
+        outputs=", ".join(f"tb_out_{n}[tb_i]" for n in outputs),
     )
 
 
 def run_icarus(
     verilog: Path, top: str, netlist: Netlist, inputs: dict, workdir: Path
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, float]:
     """Icarus's outputs for `inputs` (each (n_cycles, n_tests)) in the same shape,
-    plus, per port, an (n_cycles, n_tests) mask of where Icarus printed x or z."""
+    per port an (n_cycles, n_tests) mask of where Icarus printed x or z, and the
+    seconds the simulation took between the "loaded" and "simulated" markers."""
     workdir = workdir.resolve()  # the testbench embeds the paths; keep them absolute
     workdir.mkdir(parents=True, exist_ok=True)
     n_cycles, n_tests = next(iter(inputs.values())).shape
@@ -94,7 +111,15 @@ def run_icarus(
     write_stimulus(netlist, inputs, stim)
     tb.write_text(testbench(netlist, top, n_rows, stim, out))
     subprocess.run(["iverilog", "-g2012", "-o", vvp, tb, verilog], check=True)
-    subprocess.run(["vvp", "-n", vvp], check=True, stdout=subprocess.DEVNULL)
+    marks = {}
+    with subprocess.Popen(
+        ["vvp", "-n", vvp], stdout=subprocess.PIPE, text=True
+    ) as vvp_run:
+        for line in vvp_run.stdout:
+            marks[line.strip()] = time.perf_counter()
+    if vvp_run.returncode != 0:
+        raise ValueError(f"vvp failed on {verilog}")
+    seconds = marks["simulated"] - marks["loaded"]
 
     values = {name: np.zeros(n_rows, dtype=np.uint64) for name in netlist.outputs}
     unknown = {name: np.zeros(n_rows, dtype=bool) for name in netlist.outputs}
@@ -112,7 +137,7 @@ def run_icarus(
         return flat.reshape(n_tests, n_cycles).T
 
     outputs = {name: per_cycle(v) for name, v in values.items()}
-    return outputs, {name: per_cycle(u) for name, u in unknown.items()}
+    return outputs, {name: per_cycle(u) for name, u in unknown.items()}, seconds
 
 
 def first_mismatch(
