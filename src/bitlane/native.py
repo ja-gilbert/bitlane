@@ -1,9 +1,10 @@
-"""The C reference simulator, called through ctypes.
+"""The C reference and the CUDA kernel, called through ctypes.
 
 cuda/ builds one shared library with CMake. Python passes it the Packed arrays
 as pointers, the stimulus already packed for every cycle, and a buffer for the
 packed outputs, so one call runs the whole simulation with no Python in the loop.
-The CUDA kernel joins the same library in week 3.
+The two entry points, bitlane_simulate and bitlane_simulate_gpu, take the same
+arguments (see cuda/bitlane.h); `gpu=True` picks the second.
 """
 
 import ctypes
@@ -34,9 +35,8 @@ def library() -> ctypes.CDLL:
     ):
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
     lib = ctypes.CDLL(build / "libbitlane.so")
-    lib.bitlane_simulate.restype = None
     # fmt: off
-    lib.bitlane_simulate.argtypes = [
+    argtypes = [
         INT, INT, INT,  # n_nets, n_words, n_cycles
         INT, I32,       # n_levels, level_start
         U8, I32, I32,   # kind, in_nets, out_net
@@ -45,18 +45,27 @@ def library() -> ctypes.CDLL:
         INT, I32, U32,  # n_probe, probe_net, probe_words
     ]
     # fmt: on
+    for name in ("bitlane_simulate", "bitlane_simulate_gpu"):
+        if hasattr(lib, name):  # the GPU entry point exists once kernel.cu is built
+            getattr(lib, name).restype = None
+            getattr(lib, name).argtypes = argtypes
     return lib
 
 
 def run(
-    packed: Packed, stim_net: np.ndarray, stim_words: np.ndarray, probe_net: np.ndarray
+    packed: Packed,
+    stim_net: np.ndarray,
+    stim_words: np.ndarray,
+    probe_net: np.ndarray,
+    gpu: bool = False,
 ) -> np.ndarray:
     """The packed outputs, (n_cycles, n_probe, n_words), for packed stimulus of
     shape (n_cycles, n_stim, n_words). This call is what a benchmark times."""
     n_cycles, _, n_words = stim_words.shape
     probe_words = np.zeros((n_cycles, len(probe_net), n_words), dtype=np.uint32)
+    entry = "bitlane_simulate_gpu" if gpu else "bitlane_simulate"
     # fmt: off
-    library().bitlane_simulate(
+    getattr(library(), entry)(
         packed.netlist.n_nets, n_words, n_cycles,
         len(packed.level_start) - 1, packed.level_start,
         packed.kind, packed.in_nets, packed.out_net,
@@ -107,9 +116,9 @@ def unpack_probes(packed: Packed, probe_words: np.ndarray, n_tests: int) -> dict
     return outputs
 
 
-def simulate(packed: Packed, inputs: dict[str, np.ndarray]) -> dict:
-    """The same contract as refsim.simulate, computed by the C reference."""
+def simulate(packed: Packed, inputs: dict[str, np.ndarray], gpu: bool = False) -> dict:
+    """The same contract as refsim.simulate, computed by the C reference or the GPU."""
     n_tests = next(iter(inputs.values())).shape[1]
     stim_net, stim_words = pack_stimulus(packed, inputs)
-    probe_words = run(packed, stim_net, stim_words, probe_nets(packed.netlist))
+    probe_words = run(packed, stim_net, stim_words, probe_nets(packed.netlist), gpu)
     return unpack_probes(packed, probe_words, n_tests)
