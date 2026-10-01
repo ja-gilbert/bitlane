@@ -2,11 +2,10 @@
 
 import argparse
 import json
-import os
 import time
 from pathlib import Path
 
-from bitlane.bench import benchmark, cpu_name, table
+from bitlane.bench import benchmark, machine_name, table
 from bitlane.icarus import first_mismatch, run_icarus
 from bitlane.levels import pack
 from bitlane.netlist import read_netlist
@@ -38,14 +37,14 @@ def main() -> None:
     p.add_argument("--cycles", type=int, default=20)
     p.add_argument("--reset", help="input port to hold high in cycle 0")
 
-    p = sub.add_parser("bench", help="tests per second for every CPU simulator")
+    p = sub.add_parser("bench", help="tests per second for every simulator")
     p.add_argument("verilog", type=Path, help="Verilog source file")
     p.add_argument("--top", help="top module (default: the file's stem)")
     p.add_argument("--reset", help="input port to hold high in cycle 0")
     p.add_argument("--cycles", type=int, default=1)
     p.add_argument("--sizes", default="1000,10000,100000,1000000", help="test counts")
-    p.add_argument("--threads", type=int, default=os.cpu_count(), help="for Verilator")
-    p.add_argument("--repeats", type=int, default=3, help="best of, except Icarus")
+    p.add_argument("--threads", type=int, required=True, help="physical cores")
+    p.add_argument("--repeats", type=int, default=5, help="runs per median")
 
     args = parser.parse_args()
     try:
@@ -102,11 +101,12 @@ def run(args: argparse.Namespace) -> None:
                 args.verilog, top, netlist, pack(netlist), args.reset,
                 args.cycles, sizes, args.threads, args.repeats,
             )  # fmt: skip
-            cpu = f"{cpu_name()}, {args.threads} threads used"
-            print(table(rows, top, cpu))
+            machine = machine_name(args.threads)
+            print(table(rows, top, machine, args.repeats))
             results = Path("results")
             results.mkdir(exist_ok=True)
-            report = {"design": top, "cpu": cpu, "rows": rows}
+            report = {"design": top, "machine": machine, "repeats": args.repeats}
+            report["rows"] = rows
             (results / f"bench_{top}.json").write_text(json.dumps(report, indent=1))
             return
         inputs = random_inputs(netlist, args.cycles, args.tests, args.reset)
