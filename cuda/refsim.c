@@ -4,14 +4,14 @@
 // Bit t of vals[net * n_words + w] is the net's value in test 32*w + t.
 // Net 0 is constant 0 and net 1 is constant 1. Gates arrive sorted by level.
 
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "bitlane.h"
+
 enum { NOT, AND, OR, XOR, MUX };  // the order of KINDS in levels.py
 
-// Runs n_cycles cycles. stim_words[cycle][i] is the packed row of input net stim_net[i];
-// probe_words[cycle][i] receives the packed row of output net probe_net[i].
+// See bitlane.h for what the arguments mean.
 void bitlane_simulate(
     int n_nets, int n_words, int n_cycles,
     int n_levels, const int32_t *level_start,
