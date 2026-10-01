@@ -13,6 +13,7 @@ the last, and Python timestamps those lines as they arrive, so the seconds it
 reports cover the simulation alone, never the file I/O.
 """
 
+import statistics
 import subprocess
 import time
 from pathlib import Path
@@ -95,11 +96,17 @@ def testbench(netlist: Netlist, top: str, n_rows: int, stim: Path, out: Path) ->
 
 
 def run_icarus(
-    verilog: Path, top: str, netlist: Netlist, inputs: dict, workdir: Path
+    verilog: Path,
+    top: str,
+    netlist: Netlist,
+    inputs: dict,
+    workdir: Path,
+    repeats: int = 1,
 ) -> tuple[dict, dict, float]:
     """Icarus's outputs for `inputs` (each (n_cycles, n_tests)) in the same shape,
     per port an (n_cycles, n_tests) mask of where Icarus printed x or z, and the
-    seconds the simulation took between the "loaded" and "simulated" markers."""
+    seconds the simulation took between the "loaded" and "simulated" markers: the
+    median of `repeats` runs."""
     workdir = workdir.resolve()  # the testbench embeds the paths; keep them absolute
     workdir.mkdir(parents=True, exist_ok=True)
     n_cycles, n_tests = next(iter(inputs.values())).shape
@@ -111,15 +118,17 @@ def run_icarus(
     write_stimulus(netlist, inputs, stim)
     tb.write_text(testbench(netlist, top, n_rows, stim, out))
     subprocess.run(["iverilog", "-g2012", "-o", vvp, tb, verilog], check=True)
-    marks = {}
-    with subprocess.Popen(
-        ["vvp", "-n", vvp], stdout=subprocess.PIPE, text=True
-    ) as vvp_run:
-        for line in vvp_run.stdout:
-            marks[line.strip()] = time.perf_counter()
-    if vvp_run.returncode != 0:
-        raise ValueError(f"vvp failed on {verilog}")
-    seconds = marks["simulated"] - marks["loaded"]
+    gaps = []
+    for _ in range(repeats):
+        marks = {}
+        command = ["vvp", "-n", vvp]
+        with subprocess.Popen(command, stdout=subprocess.PIPE, text=True) as vvp_run:
+            for line in vvp_run.stdout:
+                marks[line.strip()] = time.perf_counter()
+        if vvp_run.returncode != 0:
+            raise ValueError(f"vvp failed on {verilog}")
+        gaps.append(marks["simulated"] - marks["loaded"])
+    seconds = statistics.median(gaps)
 
     values = {name: np.zeros(n_rows, dtype=np.uint64) for name in netlist.outputs}
     unknown = {name: np.zeros(n_rows, dtype=bool) for name in netlist.outputs}
