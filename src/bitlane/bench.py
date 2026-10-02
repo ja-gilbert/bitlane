@@ -9,9 +9,12 @@ wall-clock time, the median of `repeats` runs.
 The C reference and the GPU are also timed cold, open + run + close in one go, which
 adds the cost of allocating and freeing their buffers.
 
-Before either is timed the same workload runs untimed for SETTLE seconds. After half a
-minute idle this laptop's GPU takes about 0.9 s to leave its low-power state, and runs
-in that window are some 15 times slower; the CPU's clock needs the same courtesy.
+Before either is timed the same workload runs untimed for SETTLE seconds, to pay the
+first-run costs and let the CPU's clock settle. The GPU is woken first, with WAKE_MS
+of memory fills. This laptop's GPU drops to a low clock after a few idle seconds; a
+heavy workload brings it back within a second, but a light one (few tests, or a small
+design) leaves it at about a fifth of its full clock, up to ten times slower, for as
+long as it runs. Waking it makes every timed run start from the same state.
 """
 
 import ctypes
@@ -29,6 +32,7 @@ from bitlane.stimulus import random_inputs
 from bitlane.verilator import run_verilator
 
 SETTLE = 1.5  # seconds of untimed runs before a timed measurement
+WAKE_MS = 1000  # milliseconds of memory fills that bring the GPU to its full clock
 
 
 def median_seconds(action: Callable[[], object], repeats: int) -> float:
@@ -61,6 +65,8 @@ def time_native(
     run = native.library()["bitlane_run" + session.suffix]  # a fresh function object
     run.restype, run.argtypes = None, [ctypes.c_void_p] * 3
     pointers = session.sim, stim_words.ctypes.data, session.probe_words.ctypes.data
+    if gpu:
+        native.library().bitlane_wake_gpu(WAKE_MS)
     # Not timed: this open created the CUDA context, the first run loads the kernels and
     # touches the buffers, and an idle GPU or CPU needs time to come back up to speed.
     settled = time.perf_counter() + SETTLE
@@ -117,12 +123,20 @@ def benchmark(
     return rows
 
 
+def millions(tests: int, seconds: float) -> str:
+    """Millions of tests per second: whole millions from 99.5 up, three significant
+    figures below. Timings repeat no better than that."""
+    rate = tests / seconds / 1e6
+    return f"{rate:,.0f}" if rate >= 99.5 else f"{rate:#.3g}"  # '#' keeps a final 0
+
+
 def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
     """The warm table in Markdown with its caption, then the cold lines of the largest run."""
     columns = [key for key in rows[0] if key not in ("tests", "cycles", "cold")]
     cycles = rows[0]["cycles"]
+    per_test = "1 cycle" if cycles == 1 else f"{cycles} cycles"
     caption = (
-        f"{top}: tests per second, {cycles} cycle{'s' if cycles > 1 else ''} per test. "
+        f"{top}: millions of tests per second, {per_test} per test. "
         f"Warm runs: set up once, then stimulus in host memory to outputs in host memory, "
         f"wall clock, median of {repeats}. {machine}"
     )
@@ -133,7 +147,7 @@ def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
         "|---:|" + "---:|" * len(columns),
     ]
     for row in rows:
-        cells = [f"{row['tests'] / row[c]:,.0f}" for c in columns]
+        cells = [millions(row["tests"], row[c]) for c in columns]
         lines.append(f"| {row['tests']:,} | " + " | ".join(cells) + " |")
     last = rows[-1]
     lines.append("")
@@ -145,7 +159,7 @@ def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
         amortized = 9 * allocation * last["tests"] / warm
         lines.append(
             f"{name}, cold (open + run + close) at {last['tests']:,} tests: "
-            f"{last['tests'] / cold:,.0f} tests per second. Allocation costs "
+            f"{millions(last['tests'], cold)} million tests per second. Allocation costs "
             f"{allocation * 1e3:.2f} ms and falls under 10% of the total after "
             f"{amortized:,.0f} tests through one open simulator."
         )
@@ -157,7 +171,7 @@ def machine_name(threads: int) -> str:
     cpu = "unknown CPU"
     for line in Path("/proc/cpuinfo").read_text().splitlines():
         if line.startswith("model name"):
-            cpu = line.split(":", 1)[1].strip()
+            cpu = line.split(":", 1)[1].strip().replace("(R)", "").replace("(TM)", "")
             break
     query = "name,pcie.link.gen.current,pcie.link.width.current"
     command = ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader"]

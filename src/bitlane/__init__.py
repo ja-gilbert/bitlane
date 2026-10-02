@@ -5,6 +5,7 @@ import json
 import time
 from pathlib import Path
 
+from bitlane import native
 from bitlane.bench import benchmark, machine_name, table
 from bitlane.icarus import first_mismatch, run_icarus
 from bitlane.levels import pack
@@ -30,12 +31,14 @@ def main() -> None:
     p.add_argument("--tests", type=int, default=1024)
     p.add_argument("--cycles", type=int, default=100)
     p.add_argument("--reset", help="input port to hold high in cycle 0")
-    p = sub.add_parser("check", help="compare the NumPy simulator with Icarus Verilog")
+
+    p = sub.add_parser("check", help="compare a simulator with Icarus Verilog")
     p.add_argument("verilog", type=Path, help="Verilog source file")
     p.add_argument("--top", help="top module (default: the file's stem)")
     p.add_argument("--tests", type=int, default=10000)
     p.add_argument("--cycles", type=int, default=20)
     p.add_argument("--reset", help="input port to hold high in cycle 0")
+    p.add_argument("--gpu", action="store_true", help="check the CUDA kernel")
 
     p = sub.add_parser("bench", help="tests per second for every simulator")
     p.add_argument("verilog", type=Path, help="Verilog source file")
@@ -110,10 +113,18 @@ def run(args: argparse.Namespace) -> None:
             (results / f"bench_{top}.json").write_text(json.dumps(report, indent=1))
             return
         inputs = random_inputs(netlist, args.cycles, args.tests, args.reset)
-        ours = simulate(pack(netlist), inputs)
+        if args.gpu:
+            ours = native.simulate(pack(netlist), inputs, gpu=True)
+            simulator = "the CUDA kernel"
+        else:
+            ours = simulate(pack(netlist), inputs)
+            simulator = "the NumPy simulator"
         workdir = Path("build") / f"{top}_icarus"
         theirs, unknown, _ = run_icarus(args.verilog, top, netlist, inputs, workdir)
         first_cycle = 1 if netlist.clock else 0  # the reset cycle is not compared
         if mismatch := first_mismatch(ours, theirs, unknown, first_cycle):
             raise ValueError(mismatch)
-        print(f"{top}: {args.tests} tests x {args.cycles} cycles match Icarus")
+        print(
+            f"{top}: {simulator} matches Icarus on "
+            f"{args.tests} tests x {args.cycles} cycles"
+        )

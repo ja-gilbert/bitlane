@@ -1,0 +1,59 @@
+{
+ "design": "alu",
+ "machine": "CPU: Intel Core i9-14900HX, 24 threads for Verilator. GPU: NVIDIA GeForce RTX 4060 Laptop GPU, PCIe gen 4 x8.",
+ "repeats": 5,
+ "rows": [
+  {
+   "tests": 1000,
+   "cycles": 1,
+   "C reference": 2.734999725362286e-06,
+   "Icarus": 0.0021483010000338254,
+   "Verilator, 1 thread": 2.903e-05,
+   "Verilator, 24 threads": 9.059e-06,
+   "GPU": 0.00015202499980659923,
+   "cold": {
+    "C reference": 3.88469998142682e-05,
+    "GPU": 0.0010750759997790738
+   }
+  },
+  {
+   "tests": 10000,
+   "cycles": 1,
+   "C reference": 1.580399975864566e-05,
+   "Icarus": 0.021558331000051112,
+   "Verilator, 1 thread": 0.000282987,
+   "Verilator, 24 threads": 2.5521e-05,
+   "GPU": 0.00033697900016704807,
+   "cold": {
+    "C reference": 0.0001613909998923191,
+    "GPU": 0.0013289069997881597
+   }
+  },
+  {
+   "tests": 100000,
+   "cycles": 1,
+   "C reference": 0.00021321800022633397,
+   "Icarus": 0.21063793999974223,
+   "Verilator, 1 thread": 0.002970156,
+   "Verilator, 24 threads": 0.000209788,
+   "GPU": 0.00038038000002416084,
+   "cold": {
+    "C reference": 0.0014722190003340074,
+    "GPU": 0.002377294999860169
+   }
+  },
+  {
+   "tests": 1000000,
+   "cycles": 1,
+   "C reference": 0.00438991500004704,
+   "Icarus": 2.1165988560001097,
+   "Verilator, 1 thread": 0.03048351,
+   "Verilator, 24 threads": 0.001969928,
+   "GPU": 0.0008177459999387793,
+   "cold": {
+    "C reference": 0.01948927699959313,
+    "GPU": 0.004677095999795711
+   }
+  }
+ ]
+}

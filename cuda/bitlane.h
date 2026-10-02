@@ -42,6 +42,7 @@ bitlane_gpu_sim *bitlane_open_gpu(
     int n_probe, const int32_t *probe_net);
 void bitlane_run_gpu(bitlane_gpu_sim *sim, const uint32_t *stim_words, uint32_t *probe_words);
 void bitlane_close_gpu(bitlane_gpu_sim *sim);
+void bitlane_wake_gpu(int milliseconds);  // for benchmarks: raises an idle GPU's clock
 
 #ifdef __cplusplus
 }
