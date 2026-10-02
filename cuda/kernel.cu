@@ -3,6 +3,7 @@
 // stays on the GPU: open allocates every buffer once, and each run sends the stimulus
 // up in one copy before the first cycle and brings the outputs back in one after the last.
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 
@@ -151,4 +152,20 @@ void bitlane_close_gpu(bitlane_gpu_sim *sim) {
     for (void *buffer : buffers) check(cudaFree(buffer));
     delete[] sim->level_start;
     delete sim;
+}
+
+// This laptop's GPU drops to a low clock after a few idle seconds, and a light workload
+// does not bring it back up. This keeps it busy for `milliseconds`, filling a 256 MB
+// buffer over and over, so that a benchmark can start every timed run at the full clock.
+// It waits for each fill so that the deadline counts finished fills, not queued ones.
+void bitlane_wake_gpu(int milliseconds) {
+    const size_t bytes = 256 << 20;
+    void *buffer;
+    check(cudaMalloc(&buffer, bytes));
+    auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+    while (std::chrono::steady_clock::now() < end) {
+        check(cudaMemset(buffer, 0, bytes));
+        check(cudaDeviceSynchronize());
+    }
+    check(cudaFree(buffer));
 }

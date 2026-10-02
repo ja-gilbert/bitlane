@@ -54,6 +54,8 @@ def library() -> ctypes.CDLL:
         getattr(lib, "bitlane_run" + suffix).argtypes = [SIM, U32, U32]
         getattr(lib, "bitlane_close" + suffix).restype = None
         getattr(lib, "bitlane_close" + suffix).argtypes = [SIM]
+    lib.bitlane_wake_gpu.restype = None
+    lib.bitlane_wake_gpu.argtypes = [INT]
     return lib
 
 

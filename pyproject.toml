@@ -1,7 +1,7 @@
 [project]
 name = "bitlane"
 version = "0.1.0"
-description = "Add your description here"
+description = "A GPU gate-level logic simulator: 32 tests per word, checked against Icarus Verilog"
 readme = "README.md"
 authors = [
     { name = "Jamie Gilbert", email = "237062624+ja-gilbert@users.noreply.github.com" }
