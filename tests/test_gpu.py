@@ -19,7 +19,7 @@ def open_design(name, gpu, seed=0):
     inputs = random_inputs(netlist, 20, 1000, reset=RESET.get(name), seed=seed)
     stim_net, stim_words = native.pack_stimulus(packed, inputs)
     n_cycles, _, n_words = stim_words.shape
-    probe_net = native.probe_nets(netlist)
+    probe_net = native.probe_nets(packed)
     session = native.open_session(packed, stim_net, probe_net, n_cycles, n_words, gpu)
     return session, stim_words
 

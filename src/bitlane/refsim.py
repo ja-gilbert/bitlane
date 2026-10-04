@@ -3,9 +3,9 @@
 Every net holds one uint32 word per group of 32 tests: bit t of word w is the
 net's value in test 32*w + t. One bitwise operation on two words therefore runs
 a gate for 32 tests at once, and a MUX is (b & s) | (a & ~s): take b's bit where
-s is 1 and a's bit where s is 0. Values live in vals[net, word], net-major, so
-one gate's words sit together: the layout the CUDA kernel will use with one
-thread per (gate, word).
+s is 1 and a's bit where s is 0. Values live in vals[row, word], one row per net
+(packed.row says which), so one gate's words sit together: the layout the CUDA
+kernel uses with one thread per (gate, word).
 
 A cycle applies the inputs, evaluates the gates, samples the outputs, and then
 lets every flop capture its D: the clock edge. Flops start at 0, so a design
@@ -29,10 +29,10 @@ OPS = [  # in KINDS order (NOT, AND, OR, XOR, MUX); each takes the input words a
 
 
 def new_vals(packed: Packed, n_tests: int) -> np.ndarray:
-    """vals[net, word], all zero except the constant-1 net; flops start at 0 too."""
+    """vals[row, word], all zero except the constant-1 net; flops start at 0 too."""
     n_words = (n_tests + 31) // 32  # the last word's spare lanes are padding
-    vals = np.zeros((packed.netlist.n_nets, n_words), dtype=np.uint32)
-    vals[1] = 0xFFFFFFFF  # net 1 is constant 1
+    vals = np.zeros((packed.n_rows, n_words), dtype=np.uint32)
+    vals[1] = 0xFFFFFFFF  # net 1, on row 1, is constant 1
     return vals
 
 
@@ -47,7 +47,7 @@ def pack_inputs(
         by_word = padded.reshape(n_words, 32)  # test 32*w + t sits at [w, t]
         for bit, net in enumerate(packed.netlist.inputs[name]):
             lane_bits = ((by_word >> bit) & 1).astype(np.uint32)
-            vals[net] = np.bitwise_or.reduce(lane_bits << LANES, axis=1)
+            vals[packed.row[net]] = np.bitwise_or.reduce(lane_bits << LANES, axis=1)
 
 
 def eval_gates(packed: Packed, vals: np.ndarray) -> None:
@@ -74,7 +74,7 @@ def unpack_outputs(packed: Packed, vals: np.ndarray, n_tests: int) -> dict:
     for name, nets in packed.netlist.outputs.items():
         values = np.zeros(n_tests, dtype=np.uint64)
         for bit, net in enumerate(nets):
-            lane_bits = (vals[net][:, None] >> LANES) & 1  # (n_words, 32)
+            lane_bits = (vals[packed.row[net]][:, None] >> LANES) & 1  # (n_words, 32)
             values |= lane_bits.reshape(-1)[:n_tests].astype(np.uint64) << bit
         outputs[name] = values
     return outputs
