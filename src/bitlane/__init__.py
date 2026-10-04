@@ -79,7 +79,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"level {k + 1:3}: {starts[k + 1] - starts[k]:5} gates")
         print(
             f"{len(netlist.gates)} gates, {len(netlist.flops)} flops, "
-            f"{netlist.n_nets} nets, depth {depth}"
+            f"{netlist.n_nets} nets in {packed.n_rows} rows, depth {depth}"
         )
     elif args.command == "sim":
         netlist = read_netlist(args.netlist)

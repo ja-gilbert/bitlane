@@ -16,7 +16,6 @@ from pathlib import Path
 import numpy as np
 
 from bitlane.levels import Packed
-from bitlane.netlist import Netlist
 from bitlane.refsim import new_vals, pack_inputs, unpack_outputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -81,7 +80,7 @@ def open_session(
     suffix = "_gpu" if gpu else ""
     # fmt: off
     sim = getattr(library(), "bitlane_open" + suffix)(
-        packed.netlist.n_nets, n_words, n_cycles,
+        packed.n_rows, n_words, n_cycles,
         len(packed.level_start) - 1, packed.level_start,
         packed.kind, packed.in_nets, packed.out_net,
         len(packed.flop_d), packed.flop_d, packed.flop_q,
@@ -114,21 +113,18 @@ def close_session(session: Session) -> None:
         session.sim = None
 
 
-def probe_nets(netlist: Netlist) -> np.ndarray:
-    """Every output port's nets, in port order: the rows the C code copies out."""
-    return np.array(
-        [n for nets in netlist.outputs.values() for n in nets], dtype=np.int32
-    )
+def probe_nets(packed: Packed) -> np.ndarray:
+    """The rows of every output port's nets, in port order: what the C code copies out."""
+    outputs = packed.netlist.outputs
+    return packed.row[[n for nets in outputs.values() for n in nets]]
 
 
 def pack_stimulus(packed: Packed, inputs: dict) -> tuple[np.ndarray, np.ndarray]:
-    """The driven input nets and their packed words for every cycle:
+    """The rows of the driven input nets and their packed words for every cycle:
     stim_net (n_stim,) and stim_words (n_cycles, n_stim, n_words)."""
     netlist = packed.netlist
     n_cycles, n_tests = next(iter(inputs.values())).shape
-    stim_net = np.array(
-        [n for name in inputs for n in netlist.inputs[name]], dtype=np.int32
-    )
+    stim_net = packed.row[[n for name in inputs for n in netlist.inputs[name]]]
     vals = new_vals(packed, n_tests)  # scratch rows, for packing only
     stim_words = np.zeros((n_cycles, len(stim_net), vals.shape[1]), dtype=np.uint32)
     for cycle in range(n_cycles):
@@ -141,7 +137,7 @@ def unpack_probes(packed: Packed, probe_words: np.ndarray, n_tests: int) -> dict
     """Packed probe rows for every cycle back to outputs[port] of (n_cycles, n_tests)."""
     netlist = packed.netlist
     n_cycles = len(probe_words)
-    probe_net = probe_nets(netlist)
+    probe_net = probe_nets(packed)
     vals = new_vals(packed, n_tests)  # scratch rows, for unpacking only
     outputs = {
         name: np.zeros((n_cycles, n_tests), dtype=np.uint64) for name in netlist.outputs
@@ -158,7 +154,7 @@ def simulate(packed: Packed, inputs: dict[str, np.ndarray], gpu: bool = False) -
     n_tests = next(iter(inputs.values())).shape[1]
     stim_net, stim_words = pack_stimulus(packed, inputs)
     n_cycles, _, n_words = stim_words.shape
-    probe_net = probe_nets(packed.netlist)
+    probe_net = probe_nets(packed)
     session = open_session(packed, stim_net, probe_net, n_cycles, n_words, gpu)
     outputs = unpack_probes(packed, run(session, stim_words), n_tests)
     close_session(session)

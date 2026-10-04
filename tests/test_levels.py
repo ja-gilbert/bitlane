@@ -59,17 +59,31 @@ def test_packed_levels_only_read_what_is_known(name):
     assert packed.level_start[0] == 0 and packed.level_start[-1] == len(netlist.gates)
     known = {0, 1} | {n for nets in netlist.inputs.values() for n in nets}
     known |= {flop.q for flop in netlist.flops}
+    known = set(packed.row[list(known)])
     for start, end in zip(packed.level_start, packed.level_start[1:]):
-        assert all(n in known for n in packed.in_nets[start:end].flat)
-        known |= set(packed.out_net[start:end])
+        ins, outs = packed.in_nets[start:end], packed.out_net[start:end]
+        assert all(r in known for r in ins.flat)
+        # A gate never writes a row that another gate of its level still reads.
+        assert not set(outs) & set(ins.flat)
+        known |= set(outs)
     assert Counter(KINDS[k] for k in packed.kind) == Counter(
         g.kind for g in netlist.gates
     )
     assert len(packed.flop_d) == len(packed.flop_q) == len(netlist.flops)
 
 
+def test_rows_are_reused_and_the_constants_keep_theirs():
+    netlist, _ = load("alu")
+    packed = pack(netlist)
+    assert packed.row[0] == 0 and packed.row[1] == 1
+    assert packed.n_rows < netlist.n_nets  # some output took a dead net's row
+    assert packed.n_rows == max(packed.out_net) + 1
+
+
 def test_packed_toggle_layout():
     packed = pack(TOGGLE)
+    assert packed.row.tolist() == [0, 1, 2, 3, 4]  # nothing to reuse
+    assert packed.n_rows == 5
     assert packed.kind.tolist() == [KINDS.index("NOT")]
     assert packed.in_nets.tolist() == [[3, 0, 0]]
     assert packed.out_net.tolist() == [4]

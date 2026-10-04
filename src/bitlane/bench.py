@@ -94,7 +94,7 @@ def benchmark(
     # it (up to 32 MB), later opens then reuse the freed memory, and their cold times
     # skip the page faults that a first open pays.
     ctypes.CDLL(None).mallopt(-3, 128 * 1024)  # -3 is M_MMAP_THRESHOLD
-    probe_net = native.probe_nets(netlist)
+    probe_net = native.probe_nets(packed)
     icarus_dir = Path("build") / f"{top}_icarus"
     verilator_dir = Path("build") / "verilator" / top
     rows = []
