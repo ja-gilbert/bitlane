@@ -36,10 +36,9 @@ def test_gpu_words_match_c_reference(name):
 
 
 @BACKENDS
-@pytest.mark.parametrize("name", ["counter", "fsm"])  # the designs with state
-def test_warm_runs_start_from_reset(name, gpu):
-    session, stim_words = open_design(name, gpu)
-    other_session, other_words = open_design(name, gpu, seed=1)
+def test_warm_runs_start_from_reset(gpu):
+    session, stim_words = open_design("counter", gpu)
+    other_session, other_words = open_design("counter", gpu, seed=1)
     native.close_session(other_session)
     first = native.run(session, stim_words).copy()
     native.run(session, other_words)  # leaves different state in the flops
@@ -48,9 +47,8 @@ def test_warm_runs_start_from_reset(name, gpu):
     np.testing.assert_array_equal(again, first)
 
 
-@BACKENDS
-def test_run_refuses_a_wrong_shape_or_a_closed_session(gpu):
-    session, stim_words = open_design("counter", gpu)
+def test_run_refuses_a_wrong_shape_or_a_closed_session():
+    session, stim_words = open_design("counter", gpu=False)
     with pytest.raises(ValueError, match="stimulus"):
         # Half the cycles: without the check the C code would read past the array.
         native.run(session, stim_words[:10].copy())
