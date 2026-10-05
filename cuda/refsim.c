@@ -70,7 +70,7 @@ void bitlane_run(bitlane_sim *sim, const uint32_t *stim_words, uint32_t *probe_w
             stim_words += n_words;
         }
 
-        for (int level = 0; level < sim->n_levels; level++)  // one kernel launch per level
+        for (int level = 0; level < sim->n_levels; level++)  // one kernel launch on the GPU
             for (int g = sim->level_start[level]; g < sim->level_start[level + 1]; g++) {
                 const uint32_t *a = vals + (size_t)in_nets[3 * g] * n_words;
                 const uint32_t *b = vals + (size_t)in_nets[3 * g + 1] * n_words;

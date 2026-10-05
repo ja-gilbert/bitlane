@@ -27,7 +27,7 @@ def test_counter_matches_integer_model(simulate):
     n_cycles, n_tests = 600, 1024  # long enough for the count to wrap past 255
     rst = (rng.random((n_cycles, n_tests)) < 0.003).astype(np.uint64)
     en = (rng.random((n_cycles, n_tests)) < 0.9).astype(np.uint64)
-    rst[0] = 1  # reset first, like the Icarus testbench will
+    rst[0] = 1  # reset first, like the Icarus testbench does
     out = simulate(pack(netlist), {"rst": rst, "en": en})
     count = np.zeros(n_tests, dtype=np.uint64)
     for cycle in range(n_cycles):

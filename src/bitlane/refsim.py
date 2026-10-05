@@ -55,7 +55,7 @@ def eval_gates(packed: Packed, vals: np.ndarray) -> None:
 
     Gather the input words of all gates in the level, apply each kind's op to
     its gates in one array operation, scatter the results. Every (gate, word)
-    element of those array operations is what one GPU thread will do, and one
+    element of those array operations is what one GPU thread does, and one
     level is one kernel launch.
     """
     for start, end in pairwise(packed.level_start):

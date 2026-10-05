@@ -1,4 +1,4 @@
-// CUDA kernel v1: refsim.c with its two inner loops turned into a grid of threads.
+// The CUDA kernel: refsim.c with its two inner loops turned into a grid of threads.
 // One kernel launch per level, one thread per (gate, word of 32 tests). All state
 // stays on the GPU: open allocates every buffer once, and each run sends the stimulus
 // up in one copy before the first cycle and brings the outputs back in one after the last.

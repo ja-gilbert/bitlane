@@ -111,7 +111,7 @@ def assign_rows(
 def pack(netlist: Netlist) -> Packed:
     """Sort the gates by level, give every net a row, and pack the arrays."""
     level = gate_levels(netlist)
-    order = np.argsort(level, kind="stable")  # stable: ties keep order
+    order = np.argsort(level, kind="stable")
     gates = [netlist.gates[i] for i in order]
     row, n_rows = assign_rows(netlist, gates, [level[i] for i in order])
     in_nets = np.zeros((len(gates), 3), dtype=np.int32)
