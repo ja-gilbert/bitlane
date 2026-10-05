@@ -1,15 +1,11 @@
 """Packed-bit reference simulator: 32 tests per 32-bit word.
 
-Every net holds one uint32 word per group of 32 tests: bit t of word w is the
-net's value in test 32*w + t. One bitwise operation on two words therefore runs
-a gate for 32 tests at once, and a MUX is (b & s) | (a & ~s): take b's bit where
-s is 1 and a's bit where s is 0. Values live in vals[row, word], one row per net
-(packed.row says which), so one gate's words sit together: the layout the CUDA
-kernel uses with one thread per (gate, word).
+Bit t of word w of a net is its value in test 32*w + t, so one bitwise operation
+runs a gate for 32 tests at once. A MUX is (b & s) | (a & ~s): b's bit where s
+is 1, a's bit where s is 0.
 
-A cycle applies the inputs, evaluates the gates, samples the outputs, and then
-lets every flop capture its D: the clock edge. Flops start at 0, so a design
-must be reset by its own stimulus before its outputs mean anything.
+Flops start at 0, so a design must be reset by its own stimulus before its
+outputs mean anything. The README's "How it works" has the layout and the cycle.
 """
 
 from itertools import pairwise
