@@ -91,27 +91,32 @@ def run(args: argparse.Namespace) -> None:
         rate = args.tests * args.cycles / seconds
         print(f"{args.tests} tests x {args.cycles} cycles: {rate:,.0f} test-cycles/s")
 
-    elif args.command in ("check", "bench"):
+    elif args.command == "bench":
         top, out = synthesize(args)
         netlist = read_netlist(out)
         if netlist.clock and not args.reset:
             raise ValueError(
                 "a clocked design needs --reset so every test starts from reset"
             )
-        if args.command == "bench":
-            sizes = [int(size) for size in args.sizes.split(",")]
-            rows = benchmark(
-                args.verilog, top, netlist, pack(netlist), args.reset,
-                args.cycles, sizes, args.threads, args.repeats,
-            )  # fmt: skip
-            machine = machine_name(args.threads)
-            print(table(rows, top, machine, args.repeats))
-            results = Path("results")
-            results.mkdir(exist_ok=True)
-            report = {"design": top, "machine": machine, "repeats": args.repeats}
-            report["rows"] = rows
-            (results / f"bench_{top}.json").write_text(json.dumps(report, indent=1))
-            return
+        sizes = [int(size) for size in args.sizes.split(",")]
+        rows = benchmark(
+            args.verilog, top, netlist, pack(netlist), args.reset,
+            args.cycles, sizes, args.threads, args.repeats,
+        )  # fmt: skip
+        machine = machine_name(args.threads)
+        print(table(rows, top, machine, args.repeats))
+        results = Path("results")
+        results.mkdir(exist_ok=True)
+        report = {"design": top, "machine": machine, "repeats": args.repeats}
+        report["rows"] = rows
+        (results / f"bench_{top}.json").write_text(json.dumps(report, indent=1))
+    elif args.command == "check":
+        top, out = synthesize(args)
+        netlist = read_netlist(out)
+        if netlist.clock and not args.reset:
+            raise ValueError(
+                "a clocked design needs --reset so every test starts from reset"
+            )
         inputs = random_inputs(netlist, args.cycles, args.tests, args.reset)
         if args.gpu:
             ours = native.simulate(pack(netlist), inputs, gpu=True)
