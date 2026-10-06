@@ -2,11 +2,9 @@
 
 Verilator compiles the RTL to a C++ class. A generated main loads the stimulus
 into memory, then for every (test, cycle) row applies the inputs, settles the
-logic, samples the outputs and makes the clock edge, and only afterwards writes
-the outputs to a file. It prints the seconds spent in that loop alone, so file
-I/O is never part of a timing. With more than one thread, each thread gets its
-own model instance and a run of whole tests, and the threads are started before
-the clock, so the figure is a warm run like every other column.
+logic, samples the outputs and makes the clock edge. It prints the seconds spent
+in that loop alone. What the timing leaves out, and how the threads share the
+tests, is in the README under "What each column includes".
 """
 
 import subprocess

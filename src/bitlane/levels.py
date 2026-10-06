@@ -1,16 +1,10 @@
 """Sort gates into levels so that every gate's inputs are ready before it runs.
 
-Level 0 is what is known at the start of a cycle: the input ports, the constants
-and the flop outputs. A gate's level is one more than the highest level among its
-inputs, so the gates of one level depend only on lower levels and can all be
-evaluated at once. A gate that never becomes ready is on a combinational loop,
-or is fed by one.
-
-pack() then lays the gates out in level order as flat arrays, the form the
-simulators read, and gives every net a row of the value array. A gate's output
-takes over the row of a net that no later level reads, so the rows in use stay
-small enough to live in cache: the same trick as a register allocator, or the
-memory planner of an ML compiler.
+gate_levels() puts each gate one level above the highest of its inputs, so the
+gates of one level can all be evaluated at once. pack() lays the gates out in
+level order as flat arrays and gives every net a row of the value array. A gate's
+output takes over the row of a net that no later level reads, so the rows in use
+stay small enough to live in cache. The README's "How it works" explains both.
 """
 
 from collections import defaultdict, deque
@@ -111,7 +105,8 @@ def assign_rows(
 def pack(netlist: Netlist) -> Packed:
     """Sort the gates by level, give every net a row, and pack the arrays."""
     level = gate_levels(netlist)
-    order = np.argsort(level, kind="stable")  # stable: ties keep order
+    # stable keeps each level in netlist order: the layout the published benchmarks used
+    order = np.argsort(level, kind="stable")
     gates = [netlist.gates[i] for i in order]
     row, n_rows = assign_rows(netlist, gates, [level[i] for i in order])
     in_nets = np.zeros((len(gates), 3), dtype=np.int32)

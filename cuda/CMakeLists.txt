@@ -1,13 +1,8 @@
-# Builds libbitlane.so: the C reference always, and the CUDA kernel once kernel.cu exists.
+# Builds libbitlane.so: the C reference and the CUDA kernel.
 cmake_minimum_required(VERSION 3.24)
-project(bitlane C)
+project(bitlane C CUDA)
 
-add_library(bitlane SHARED refsim.c)
+add_library(bitlane SHARED refsim.c kernel.cu)
+set_target_properties(bitlane PROPERTIES CUDA_ARCHITECTURES 89)  # RTX 4060: Ada, sm_89
 target_compile_options(bitlane PRIVATE $<$<COMPILE_LANGUAGE:C>:-O3;-march=native;-Wall;-Wextra>)
-
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cu)
-  enable_language(CUDA)
-  target_sources(bitlane PRIVATE kernel.cu)
-  set_target_properties(bitlane PROPERTIES CUDA_ARCHITECTURES 89)  # RTX 4060: Ada, sm_89
-  target_compile_options(bitlane PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3>)
-endif()
+target_compile_options(bitlane PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3>)

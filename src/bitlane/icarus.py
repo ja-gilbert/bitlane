@@ -3,14 +3,12 @@
 A generated testbench loads one row of input bits per (test, cycle) from a hex
 file and, for every row, drives the inputs after the clock edge, samples the
 outputs one time unit before the next edge, then makes the edge: the cycle model
-of refsim. The tests run back to back in one simulation, so a test starts in
-whatever state the previous one left (x for the very first), which is why the
-compare starts after the reset cycle.
+of refsim. The tests run back to back in one simulation, which is why the compare
+starts after the reset cycle (see "Correctness" in the README).
 
-The sampled outputs go into memories and are written out only after the last
-cycle. The testbench prints "loaded" before the first cycle and "simulated" after
-the last, and Python timestamps those lines as they arrive, so the seconds it
-reports cover the simulation alone, never the file I/O.
+The testbench prints "loaded" before the first cycle and "simulated" after the
+last, and Python timestamps those lines as they arrive, so the seconds it reports
+cover the simulation alone, never the file I/O.
 """
 
 import statistics

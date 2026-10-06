@@ -1,20 +1,13 @@
 """Tests per second for every simulator at several test counts, on the same stimulus.
 
-The headline is the warm run: each simulator is set up first (buffers allocated, models
-built, stimulus file loaded), then timed on a run that takes the stimulus from host
-memory and leaves the outputs in host memory. For the GPU that includes the upload of
-the stimulus and the download of the results. File I/O is never timed. Every figure is
-wall-clock time, the median of `repeats` runs.
+Warm runs are the headline: set up first, then timed from stimulus in host memory to
+outputs in host memory, so the GPU pays for its upload and download. The C reference
+and the GPU are also timed cold: open + run + close.
 
-The C reference and the GPU are also timed cold, open + run + close in one go, which
-adds the cost of allocating and freeing their buffers.
-
-Before either is timed the same workload runs untimed for SETTLE seconds, to pay the
-first-run costs and let the CPU's clock settle. The GPU is woken first, with WAKE_MS
-of memory fills. This laptop's GPU drops to a low clock after a few idle seconds; a
-heavy workload brings it back within a second, but a light one (few tests, or a small
-design) leaves it at about a fifth of its full clock, up to ten times slower, for as
-long as it runs. Waking it makes every timed run start from the same state.
+Before timing, the workload runs untimed for SETTLE seconds to pay the first-run
+costs and let the CPU's clock settle, and the GPU is woken with WAKE_MS of memory
+fills, because an idle GPU drops to a low clock that a light workload does not bring
+back. The README section "What each column includes" has the full method.
 """
 
 import ctypes
