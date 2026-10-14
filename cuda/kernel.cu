@@ -119,7 +119,6 @@ void bitlane_run_gpu(bitlane_gpu_sim *sim, const uint32_t *stim_words, uint32_t 
     size_t stim_cycle = (size_t)sim->n_stim * n_words, probe_cycle = (size_t)sim->n_probe * n_words;
     uint32_t *vals = sim->vals;
 
-    // The stimulus of every cycle goes up in one copy.
     check(cudaMemcpy(sim->stim, stim_words, sim->n_cycles * stim_cycle * sizeof(uint32_t),
                      cudaMemcpyHostToDevice));
     // Every run starts from reset. Only the flop outputs carry state from one run to the
@@ -129,7 +128,7 @@ void bitlane_run_gpu(bitlane_gpu_sim *sim, const uint32_t *stim_words, uint32_t 
 
     for (int cycle = 0; cycle < sim->n_cycles; cycle++) {
         rows(vals, sim->stim_net, sim->stim + cycle * stim_cycle, nullptr, sim->n_stim, n_words);
-        for (int level = 0; level < sim->n_levels; level++) {  // one launch per level
+        for (int level = 0; level < sim->n_levels; level++) {
             int first = sim->level_start[level], n = sim->level_start[level + 1] - first;
             eval_level<<<blocks((size_t)n * n_words), BLOCK>>>(vals, sim->kind, sim->in_nets,
                                                                sim->out_net, first, n, n_words);

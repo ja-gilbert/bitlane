@@ -119,7 +119,10 @@ def run_icarus(
     vvp = workdir / "tb.vvp"
     write_stimulus(netlist, inputs, stim)
     tb.write_text(testbench(netlist, top, n_rows, stim, out))
-    subprocess.run(["iverilog", "-g2012", "-o", vvp, tb, verilog], check=True)
+    # -s: only the testbench is a top-level module; an unused module in the design
+    # file would otherwise run alongside it.
+    command = ["iverilog", "-g2012", "-s", "bitlane-tb", "-o", vvp, tb, verilog]
+    subprocess.run(command, check=True)
     gaps = []
     for _ in range(repeats):
         marks = {}

@@ -52,9 +52,8 @@ def time_native(
         native.close_session(session)
 
     session = native.open_session(packed, stim_net, probe_net, n_cycles, n_words, gpu)
-    # The timed call goes straight to the library with its pointers worked out once, so
-    # the microseconds of checks and conversions in native.run are not timed, just as
-    # Verilator's timer inside its own process leaves out everything around its loop.
+    # Call the library directly, with the pointers worked out once, so that native.run's
+    # checks are not timed: Verilator's timer, too, sees only its own loop.
     run = native.library()["bitlane_run" + session.suffix]  # a fresh function object
     run.restype, run.argtypes = None, [ctypes.c_void_p] * 3
     pointers = session.sim, stim_words.ctypes.data, session.probe_words.ctypes.data
@@ -146,10 +145,9 @@ def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
     lines.append("")
     for name, cold in last["cold"].items():
         warm = last[name]
-        # Everything a cold call adds to a warm run: mostly opening and closing (allocating
-        # and freeing the buffers, uploading the netlist), and a first run on fresh
-        # buffers. Paid once per open simulator, it is under a tenth of the total time
-        # once the tests run through it take nine times as long as it does.
+        # What a cold call adds to a warm run, mostly opening and closing. Paid once per
+        # open simulator, it is under a tenth of the total once the tests run through it
+        # take nine times as long as it does.
         overhead = cold - warm
         amortized = 9 * overhead * last["tests"] / warm
         lines.append(

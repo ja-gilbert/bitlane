@@ -67,3 +67,21 @@ def test_paths_may_contain_spaces(tmp_path, monkeypatch):
         "endmodule\n"
     )
     assert icarus_mismatch(verilog, "comb", workdir) is None
+
+
+def test_unrelated_modules_do_not_run(tmp_path):
+    # Yosys drops a module the top does not use, but Icarus would run it as a second
+    # top-level module beside the testbench: here it would end the simulation at once.
+    verilog = tmp_path / "design.v"
+    verilog.write_text(
+        "module comb(input wire a, output wire y);\n"
+        "    assign y = ~a;\n"
+        "endmodule\n"
+        "module unrelated(input wire b, output wire z);\n"
+        "    assign z = b;\n"
+        "`ifndef SYNTHESIS\n"
+        "    initial $finish;\n"
+        "`endif\n"
+        "endmodule\n"
+    )
+    assert icarus_mismatch(verilog, "comb", tmp_path) is None
