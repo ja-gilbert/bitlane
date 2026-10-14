@@ -1,6 +1,7 @@
 # bitlane synthesis flow: flatten a design into AND/OR/XOR/MUX/NOT gates and
-# positive-edge D flip-flops. synth.py runs it as
-#   read_verilog <file>; hierarchy -check -top <top>; script synth.ys; write_json <out>
+# positive-edge D flip-flops. synth.py runs it between
+#   read_verilog <file>; hierarchy -check -top <top>   and   write_json <out>
+# in one script written next to the netlist.
 
 proc                           # always blocks -> flip-flop cells and muxes
 flatten                        # inline submodules into the top module

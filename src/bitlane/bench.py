@@ -146,15 +146,17 @@ def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
     lines.append("")
     for name, cold in last["cold"].items():
         warm = last[name]
-        allocation = cold - warm
-        # Allocation is paid once per open simulator: it is under a tenth of the total
-        # time once the tests run through it take nine times as long as it does.
-        amortized = 9 * allocation * last["tests"] / warm
+        # Everything a cold call adds to a warm run: mostly opening and closing (allocating
+        # and freeing the buffers, uploading the netlist), and a first run on fresh
+        # buffers. Paid once per open simulator, it is under a tenth of the total time
+        # once the tests run through it take nine times as long as it does.
+        overhead = cold - warm
+        amortized = 9 * overhead * last["tests"] / warm
         lines.append(
             f"{name}, cold (open + run + close) at {last['tests']:,} tests: "
-            f"{millions(last['tests'], cold)} million tests per second. Allocation costs "
-            f"{allocation * 1e3:.2f} ms and falls under 10% of the total after "
-            f"{amortized:,.0f} tests through one open simulator."
+            f"{millions(last['tests'], cold)} million tests per second. Additional "
+            f"cold-run overhead (cold minus warm): {overhead * 1e3:.2f} ms, under 10% "
+            f"of the total after {amortized:,.0f} tests through one open simulator."
         )
     return "\n".join(lines)
 
