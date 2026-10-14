@@ -22,8 +22,9 @@ from bitlane.netlist import Netlist
 
 TESTBENCH = """\
 `timescale 1ns/1ps
-module tb;
-    reg {clock} = 0;
+// An escaped name runs from the backslash to the next space and may hold a hyphen,
+// which an ordinary name cannot, so no module of the design can be called this.
+module \\bitlane-tb ;
 {signals}
     {top} dut({connections});
     reg [{row_bits}:0] tb_stim [0:{last_row}];
@@ -35,8 +36,7 @@ module tb;
         for (tb_i = 0; tb_i <= {last_row}; tb_i = tb_i + 1) begin
             #1 {{{inputs}}} = tb_stim[tb_i];  // after the edge
             #3 {sample}  // one unit before the edge
-            #1 {clock} = 1;
-            #5 {clock} = 0;
+            {edge}
         end
         $display("simulated"); $fflush;
         tb_f = $fopen("{out}", "w");
@@ -69,25 +69,29 @@ def write_stimulus(netlist: Netlist, inputs: dict, path: Path) -> None:
 
 def testbench(netlist: Netlist, top: str, n_rows: int, stim: Path, out: Path) -> str:
     """The Verilog testbench that replays `stim` through `top` and writes `out`."""
+    # The testbench names the net for port p dut_p, and every name of its own starts
+    # with tb_, so no two names can clash whatever the ports are called.
     ports = netlist.inputs | netlist.outputs
     inputs, outputs = driven_inputs(netlist), list(netlist.outputs)
-    signals = [f"    reg [{len(ports[n]) - 1}:0] {n};" for n in inputs]
-    signals += [f"    wire [{len(ports[n]) - 1}:0] {n};" for n in outputs]
+    clock = netlist.clock
+    signals = [f"    reg dut_{clock} = 0;"] if clock else []  # only a clocked design
+    signals += [f"    reg [{len(ports[n]) - 1}:0] dut_{n};" for n in inputs]
+    signals += [f"    wire [{len(ports[n]) - 1}:0] dut_{n};" for n in outputs]
     memories = [
         f"    reg [{len(ports[n]) - 1}:0] tb_out_{n} [0:{n_rows - 1}];" for n in outputs
     ]
     return TESTBENCH.format(
-        clock=netlist.clock or "clk",
         signals="\n".join(signals),
         top=top,
-        connections=", ".join(f".{n}({n})" for n in ports),
+        connections=", ".join(f".{n}(dut_{n})" for n in ports),
         row_bits=sum(len(ports[n]) for n in inputs) - 1,
         last_row=n_rows - 1,
         stim=stim,
         out=out,
-        inputs=", ".join(inputs),
+        inputs=", ".join(f"dut_{n}" for n in inputs),
         memories="\n".join(memories),
-        sample=" ".join(f"tb_out_{n}[tb_i] = {n};" for n in outputs),
+        sample=" ".join(f"tb_out_{n}[tb_i] = dut_{n};" for n in outputs),
+        edge=f"#1 dut_{clock} = 1; #5 dut_{clock} = 0;" if clock else "",
         formats=" ".join("%h" for _ in outputs),
         outputs=", ".join(f"tb_out_{n}[tb_i]" for n in outputs),
     )
@@ -115,7 +119,10 @@ def run_icarus(
     vvp = workdir / "tb.vvp"
     write_stimulus(netlist, inputs, stim)
     tb.write_text(testbench(netlist, top, n_rows, stim, out))
-    subprocess.run(["iverilog", "-g2012", "-o", vvp, tb, verilog], check=True)
+    # -s: only the testbench is a top-level module; an unused module in the design
+    # file would otherwise run alongside it.
+    command = ["iverilog", "-g2012", "-s", "bitlane-tb", "-o", vvp, tb, verilog]
+    subprocess.run(command, check=True)
     gaps = []
     for _ in range(repeats):
         marks = {}

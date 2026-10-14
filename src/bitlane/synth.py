@@ -15,11 +15,16 @@ def synth(verilog: Path, top: str, out: Path) -> None:
     errors; if it fails, exit with a one-line message.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
-    commands = (
-        f"read_verilog {verilog}; hierarchy -check -top {top}; "
-        f"script {SCRIPT}; write_json {out}"
+    # The whole run as one script, with the paths quoted because Yosys splits commands
+    # at spaces, and the flow pasted in because its script command keeps the quotes.
+    run = out.with_suffix(".ys")
+    run.write_text(
+        f'read_verilog "{verilog}"\n'
+        f"hierarchy -check -top {top}\n"
+        f"{SCRIPT.read_text()}"
+        f'write_json "{out}"\n'
     )
-    result = subprocess.run(["yosys", "-q", "-p", commands], check=False)
+    result = subprocess.run(["yosys", "-q", "-s", run], check=False)
     if result.returncode != 0:
         raise SystemExit(f"bitlane: yosys failed on {verilog} (see the error above)")
 

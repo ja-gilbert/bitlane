@@ -52,9 +52,8 @@ def time_native(
         native.close_session(session)
 
     session = native.open_session(packed, stim_net, probe_net, n_cycles, n_words, gpu)
-    # The timed call goes straight to the library with its pointers worked out once, so
-    # the microseconds of checks and conversions in native.run are not timed, just as
-    # Verilator's timer inside its own process leaves out everything around its loop.
+    # Call the library directly, with the pointers worked out once, so that native.run's
+    # checks are not timed: Verilator's timer, too, sees only its own loop.
     run = native.library()["bitlane_run" + session.suffix]  # a fresh function object
     run.restype, run.argtypes = None, [ctypes.c_void_p] * 3
     pointers = session.sim, stim_words.ctypes.data, session.probe_words.ctypes.data
@@ -146,15 +145,16 @@ def table(rows: list[dict], top: str, machine: str, repeats: int) -> str:
     lines.append("")
     for name, cold in last["cold"].items():
         warm = last[name]
-        allocation = cold - warm
-        # Allocation is paid once per open simulator: it is under a tenth of the total
-        # time once the tests run through it take nine times as long as it does.
-        amortized = 9 * allocation * last["tests"] / warm
+        # What a cold call adds to a warm run, mostly opening and closing. Paid once per
+        # open simulator, it is under a tenth of the total once the tests run through it
+        # take nine times as long as it does.
+        overhead = cold - warm
+        amortized = 9 * overhead * last["tests"] / warm
         lines.append(
             f"{name}, cold (open + run + close) at {last['tests']:,} tests: "
-            f"{millions(last['tests'], cold)} million tests per second. Allocation costs "
-            f"{allocation * 1e3:.2f} ms and falls under 10% of the total after "
-            f"{amortized:,.0f} tests through one open simulator."
+            f"{millions(last['tests'], cold)} million tests per second. Additional "
+            f"cold-run overhead (cold minus warm): {overhead * 1e3:.2f} ms, under 10% "
+            f"of the total after {amortized:,.0f} tests through one open simulator."
         )
     return "\n".join(lines)
 
