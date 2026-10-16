@@ -9,7 +9,11 @@
 //       probe_words[cycle][i] receives the packed row of output net probe_net[i].
 // close frees everything.
 //
-// Nets hold one uint32 word per 32 tests; net 0 is constant 0 and net 1 constant 1;
+// Every net index (in_nets, out_net, flop_d, flop_q, stim_net, probe_net) is a row of
+// the value array and n_nets is the number of rows: Python gives each net a row
+// (src/bitlane/levels.py), nets whose lifetimes do not overlap share one, and no gate
+// writes a row that another gate of its level reads. A row holds one uint32 word per
+// 32 tests; row 0 is constant 0 and row 1 constant 1;
 // gates arrive sorted by level. Every cycle: apply the stimulus rows, evaluate the gates
 // level by level, copy the probe rows out, then let every flop capture its D (read all
 // D before writing any Q). Every run starts with all flops at 0.

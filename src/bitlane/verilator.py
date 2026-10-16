@@ -4,7 +4,7 @@ Verilator compiles the RTL to a C++ class. A generated main loads the stimulus
 into memory, then for every (test, cycle) row applies the inputs, settles the
 logic, samples the outputs and makes the clock edge. It prints the seconds spent
 in that loop alone. What the timing leaves out, and how the threads share the
-tests, is in the README under "What each column includes".
+tests, is in docs/benchmark.md under "What each column includes".
 """
 
 import subprocess
