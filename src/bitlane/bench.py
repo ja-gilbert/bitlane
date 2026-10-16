@@ -7,7 +7,7 @@ and the GPU are also timed cold: open + run + close.
 Before timing, the workload runs untimed for SETTLE seconds to pay the first-run
 costs and let the CPU's clock settle, and the GPU is woken with WAKE_MS of memory
 fills, because an idle GPU drops to a low clock that a light workload does not bring
-back. The README section "What each column includes" has the full method.
+back. docs/benchmark.md, under "What each column includes", has the full method.
 """
 
 import ctypes

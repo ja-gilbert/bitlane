@@ -3,7 +3,8 @@
     uv run scripts/gpu_run.py alu 1000000 1 - 3
     uv run scripts/gpu_run.py fsm 1000000 20 rst 3
 
-The README's profiles wrap this in `ncu`; see its profiling section for the command.
+The profiles in docs/profiling.md wrap this in `ncu`; its "Reproducing" section
+has the command.
 """
 
 import sys
