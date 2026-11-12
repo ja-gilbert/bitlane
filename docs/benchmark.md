@@ -117,8 +117,10 @@ time, the median of five runs. File I/O is never timed for any simulator.
 - **Packing.** The C reference and the GPU are given the stimulus already packed 32
   tests to a word and leave the outputs packed. The packing is done once in NumPy,
   untimed, and the benchmark does not unpack the outputs. For a million ALU tests the
-  packing takes about 106 ms and the unpacking 30 ms, against 0.75 ms for the GPU run
-  itself. Icarus and Verilator read one row per test and cycle inside their timed loops.
+  packing takes about 70 ms and the unpacking about 35 ms on a repeated call (the first
+  call in a process takes 100 to 130 ms and about 50 ms), against 0.75 ms for the GPU
+  run itself. Icarus and Verilator read one row per test and cycle inside their timed
+  loops.
 - **Icarus.** The testbench loads the stimulus file before the first cycle and writes
   the outputs after the last. It prints a marker at each of those two points and the
   time between the markers is the figure.

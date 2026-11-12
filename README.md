@@ -5,7 +5,8 @@ AND, OR, XOR, NOT and MUX gates plus D flip-flops, Python sorts the gates into l
 and a CUDA kernel evaluates one level per launch for many tests at once. Each 32-bit
 word holds the value of one net in 32 different tests, one test per bit, so a single
 AND instruction simulates an AND gate 32 times. The NumPy, C and CUDA versions are
-checked against Icarus Verilog, cycle by cycle, on random tests.
+checked against Icarus Verilog, cycle by cycle, on random tests by `bitlane check` and
+the test suite; the benchmark only times them.
 
 **The result.** On an 8-bit ALU (297 gates) the GPU simulates one million random tests
 at 1.3 billion tests per second. That is 3.9 times Verilator on 24 worker threads in
@@ -13,9 +14,10 @@ the table below, but that column is noisy: across benchmark runs the ratio has b
 2.6 to 3.9, and against the median of forty Verilator runs it is about 3. It is also
 1.9 times a vectorised single-core C version of the same algorithm at its best batch
 size (4.6 times at the same batch size). With 100,000 tests per run or fewer, or on
-designs of one or two dozen gates, the CPU wins. The time runs from packed stimulus in
-host memory to packed outputs in host memory, so the PCIe copies count and the packing
-does not (see [Limits](#limits)).
+designs of one or two dozen gates, that single-core C version beats the GPU; Verilator
+on 24 threads beats it only at 10,000 tests or fewer. The time runs from packed
+stimulus in host memory to packed outputs in host memory, so the PCIe copies count and
+the packing does not (see [Limits](#limits)).
 
 ![Tests per second against tests per run for the mux, the ALU and the state machine](results/throughput.png)
 
@@ -30,9 +32,11 @@ PCIe gen 4 x8. [What each column includes](docs/benchmark.md#what-each-column-in
 | alu, 297 gates | 290 | 0.533 | 34.7 | 343 | 1,334 |
 | fsm, 14 gates, 20 cycles | 413 | 0.0274 | 0.871 | 12.7 | 364 |
 
-The GPU wins on the ALU at one million tests and nowhere else in the full tables. At
-100,000 tests and below a run is mostly fixed cost, launch overhead and PCIe copies, and
-the mux and the state machine have too little work per test for the copies to pay off.
+Against the single-core C version, the GPU wins on the ALU at one million tests and
+nowhere else in the full tables; against Verilator on 24 threads it wins on all three
+designs from 100,000 tests up. At 100,000 tests and below a run is mostly fixed cost,
+launch overhead and PCIe copies, and the mux and the state machine have too little work
+per test for the copies to pay off.
 The single-core C version beats Verilator on 24 threads on both small designs: packing
 32 tests into a word is what makes the algorithm fast, on either processor.
 
@@ -106,8 +110,9 @@ version word for word, and the Verilator harness with the NumPy simulator. It al
 covers edge cases in the netlist reader (x and z bits, outputs wired straight to an
 input or a constant, two clocks), the level sorter (a combinational loop) and the Icarus
 harness (port names that clash with the testbench, paths with spaces). The benchmark
-itself only times the simulators; the GPU was checked separately against Icarus on each
-benchmark's exact one-million-test stimulus, and matched on all three designs.
+itself only times the simulators and compares no outputs; `bitlane check --gpu --tests
+1000000`, with each design's cycle count and reset, ran the GPU on each benchmark's
+exact one-million-test stimulus, and it matched Icarus on all three designs.
 
 ## Limits
 
@@ -122,8 +127,8 @@ benchmark's exact one-million-test stimulus, and matched on all three designs.
   every other input, so tests of a clocked design seldom get far from reset.
 - The designs are tiny, 14 to 297 gates. Nothing here says how a large design behaves.
 - The headline is packed-simulation throughput. Packing a million ALU tests in NumPy
-  takes about 106 ms and unpacking the outputs 30 ms, against 0.75 ms for the run
-  itself, so with packing and unpacking counted the current code does about 7 million
+  takes about 70 ms and unpacking the outputs about 35 ms, against 0.75 ms for the run
+  itself, so with packing and unpacking counted the current code does about 9 million
   tests per second.
 - The C reference is single-threaded. The GPU at its best is 1.9 times one core at its
   best batch size, so a multi-threaded C version would very likely overtake it.
